@@ -1,1 +1,286 @@
- <!DOCTYPE html>
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#123b64">
+<title>Mon Coffre Administratif</title>
+<style>
+:root{--blue:#123b64;--light:#f1f5f9;--green:#16845b}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:var(--light);color:#172033}
+header{background:var(--blue);color:white;padding:25px 18px}
+header h1{font-size:24px;margin:0 0 8px}
+header p{margin:0;font-size:14px;line-height:1.5}
+main{max-width:800px;margin:auto;padding:18px}
+.card{background:white;border-radius:14px;padding:18px;margin-bottom:16px;box-shadow:0 2px 8px #0000000b}
+h2{font-size:18px;margin:0 0 15px}
+label{display:block;font-weight:bold;font-size:14px;margin:12px 0 6px}
+input,select,button{font:inherit;width:100%;padding:12px;border-radius:8px}
+input,select{border:1px solid #cbd5e1;background:white}
+button{border:0;background:var(--blue);color:white;font-weight:bold;cursor:pointer;margin-top:12px}
+button.secondary{background:#e5edf5;color:var(--blue)}
+button.danger{background:#a62b35;width:auto;margin:0;padding:9px 12px}
+button.small{width:auto;margin:0;padding:9px 12px}
+.note{font-size:13px;line-height:1.5;color:#526174}
+#message{font-size:14px;margin-top:12px;line-height:1.5}
+.doc{border:1px solid #e1e7ef;border-radius:10px;padding:13px;margin-top:10px}
+.doc h3{font-size:16px;overflow-wrap:anywhere;margin:0 0 8px}
+.meta{font-size:13px;color:#526174;line-height:1.6}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.empty{text-align:center;padding:20px;color:#64748b}
+footer{text-align:center;font-size:12px;color:#64748b;padding:12px 18px 28px}
+</style>
+</head>
+<body>
+<header>
+  <h1>📁 Mon Coffre Administratif</h1>
+  <p>Retrouve et organise facilement tes documents importants.</p>
+</header>
+
+<main>
+  <section class="card">
+    <h2>➕ Ajouter un document</h2>
+    <form id="form">
+      <label for="nom">Nom du document</label>
+      <input id="nom" type="text" placeholder="Ex. Carte nationale d'identité" required>
+
+      <label for="categorie">Catégorie</label>
+      <select id="categorie" required>
+        <option value="Identité">Identité</option>
+        <option value="Diplômes et formations">Diplômes et formations</option>
+        <option value="Travail">Travail</option>
+        <option value="Finances">Finances</option>
+        <option value="Logement">Logement</option>
+        <option value="Santé">Santé</option>
+        <option value="Famille">Famille</option>
+        <option value="Autres">Autres</option>
+      </select>
+
+      <label for="fichier">Choisir le fichier</label>
+      <input id="fichier" type="file" required>
+
+      <button type="submit">Enregistrer le document</button>
+      <div id="message" role="status"></div>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>🔎 Mes documents</h2>
+    <label for="recherche">Rechercher un document</label>
+    <input id="recherche" type="search" placeholder="Saisir un nom...">
+
+    <label for="filtre">Filtrer par catégorie</label>
+    <select id="filtre">
+      <option value="">Toutes les catégories</option>
+      <option>Identité</option>
+      <option>Diplômes et formations</option>
+      <option>Travail</option>
+      <option>Finances</option>
+      <option>Logement</option>
+      <option>Santé</option>
+      <option>Famille</option>
+      <option>Autres</option>
+    </select>
+
+    <p class="note" id="compteur">Chargement des documents...</p>
+    <div id="liste"></div>
+  </section>
+
+  <section class="card">
+    <h2>🔐 À savoir</h2>
+    <p class="note">Cette version conserve les fichiers dans le stockage du navigateur sur cet appareil. Elle ne chiffre pas les documents et ne les sauvegarde pas en ligne. N'y enregistre pas encore de documents confidentiels. Effacer les données du navigateur peut supprimer les fichiers enregistrés.</p>
+  </section>
+</main>
+
+<footer>Mon Coffre Administratif · Version 1.0</footer>
+
+<script>
+(function(){
+"use strict";
+
+const DB_NAME = "MonCoffreAdministratifDB";
+const STORE = "documents";
+let db;
+
+const form = document.getElementById("form");
+const nom = document.getElementById("nom");
+const categorie = document.getElementById("categorie");
+const fichier = document.getElementById("fichier");
+const recherche = document.getElementById("recherche");
+const filtre = document.getElementById("filtre");
+const liste = document.getElementById("liste");
+const compteur = document.getElementById("compteur");
+const message = document.getElementById("message");
+
+function ouvrirDB(){
+  return new Promise((resolve,reject)=>{
+    const request = indexedDB.open(DB_NAME,1);
+    request.onupgradeneeded = function(){
+      const database = request.result;
+      if(!database.objectStoreNames.contains(STORE)){
+        database.createObjectStore(STORE,{keyPath:"id",autoIncrement:true});
+      }
+    };
+    request.onsuccess = ()=>resolve(request.result);
+    request.onerror = ()=>reject(request.error);
+  });
+}
+
+function lireDocuments(){
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(STORE,"readonly");
+    const request = tx.objectStore(STORE).getAll();
+    request.onsuccess = ()=>resolve(request.result);
+    request.onerror = ()=>reject(request.error);
+  });
+}
+
+function enregistrerDocument(documentData){
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(STORE,"readwrite");
+    tx.objectStore(STORE).add(documentData);
+    tx.oncomplete = ()=>resolve();
+    tx.onerror = ()=>reject(tx.error);
+    tx.onabort = ()=>reject(tx.error);
+  });
+}
+
+function supprimerDocument(id){
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(STORE,"readwrite");
+    tx.objectStore(STORE).delete(id);
+    tx.oncomplete = ()=>resolve();
+    tx.onerror = ()=>reject(tx.error);
+  });
+}
+
+function tailleFichier(bytes){
+  if(bytes < 1024) return bytes + " octets";
+  if(bytes < 1048576) return (bytes/1024).toFixed(1) + " Ko";
+  return (bytes/1048576).toFixed(1) + " Mo";
+}
+
+function creerElement(tag,texte,classe){
+  const element = document.createElement(tag);
+  element.textContent = texte;
+  if(classe) element.className = classe;
+  return element;
+}
+
+async function afficherDocuments(){
+  try{
+    const documents = await lireDocuments();
+    const terme = recherche.value.trim().toLocaleLowerCase("fr");
+    const categorieChoisie = filtre.value;
+
+    const resultat = documents.filter(doc=>{
+      const correspondNom = doc.nom.toLocaleLowerCase("fr").includes(terme);
+      const correspondCategorie = !categorieChoisie || doc.categorie === categorieChoisie;
+      return correspondNom && correspondCategorie;
+    });
+
+    liste.replaceChildren();
+    compteur.textContent = resultat.length + " document(s) affiché(s) sur " + documents.length;
+
+    if(resultat.length === 0){
+      liste.appendChild(creerElement("p","Aucun document trouvé.","empty"));
+      return;
+    }
+
+    resultat.sort((a,b)=>b.date-a.date).forEach(doc=>{
+      const carte = document.createElement("article");
+      carte.className = "doc";
+      carte.appendChild(creerElement("h3","📄 " + doc.nom));
+      carte.appendChild(creerElement("div","Catégorie : " + doc.categorie,"meta"));
+      carte.appendChild(creerElement("div","Fichier : " + doc.fichierNom,"meta"));
+      carte.appendChild(creerElement("div","Taille : " + tailleFichier(doc.taille),"meta"));
+      carte.appendChild(creerElement("div","Ajouté le : " + new Date(doc.date).toLocaleDateString("fr-FR"),"meta"));
+
+      const actions = document.createElement("div");
+      actions.className = "actions";
+
+      const telecharger = creerElement("button","Télécharger","small");
+      telecharger.type = "button";
+      telecharger.addEventListener("click",()=>{
+        const url = URL.createObjectURL(doc.fichier);
+        const lien = document.createElement("a");
+        lien.href = url;
+        lien.download = doc.fichierNom;
+        document.body.appendChild(lien);
+        lien.click();
+        lien.remove();
+        setTimeout(()=>URL.revokeObjectURL(url),1000);
+      });
+
+      const supprimer = creerElement("button","Supprimer","danger");
+      supprimer.type = "button";
+      supprimer.addEventListener("click",async()=>{
+        if(!confirm("Supprimer le document « " + doc.nom + " » ?")) return;
+        try{
+          await supprimerDocument(doc.id);
+          message.textContent = "Document supprimé.";
+          await afficherDocuments();
+        }catch(error){
+          message.textContent = "Impossible de supprimer ce document.";
+        }
+      });
+
+      actions.append(telecharger,supprimer);
+      carte.appendChild(actions);
+      liste.appendChild(carte);
+    });
+  }catch(error){
+    compteur.textContent = "Impossible de lire les documents.";
+  }
+}
+
+form.addEventListener("submit",async function(event){
+  event.preventDefault();
+  const fichierChoisi = fichier.files[0];
+
+  if(!fichierChoisi){
+    message.textContent = "Choisis d'abord un fichier.";
+    return;
+  }
+
+  if(fichierChoisi.size > 15 * 1024 * 1024){
+    message.textContent = "Le fichier dépasse 15 Mo. Choisis un fichier plus petit.";
+    return;
+  }
+
+  message.textContent = "Enregistrement en cours...";
+
+  try{
+    await enregistrerDocument({
+      nom: nom.value.trim(),
+      categorie: categorie.value,
+      fichierNom: fichierChoisi.name,
+      type: fichierChoisi.type || "application/octet-stream",
+      taille: fichierChoisi.size,
+      date: Date.now(),
+      fichier: fichierChoisi
+    });
+    form.reset();
+    message.textContent = "Document enregistré sur cet appareil.";
+    await afficherDocuments();
+  }catch(error){
+    message.textContent = "Échec de l'enregistrement. Vérifie l'espace disponible du navigateur.";
+  }
+});
+
+recherche.addEventListener("input",afficherDocuments);
+filtre.addEventListener("change",afficherDocuments);
+
+ouvrirDB().then(database=>{
+  db = database;
+  afficherDocuments();
+}).catch(()=>{
+  compteur.textContent = "Le stockage local n'est pas disponible dans ce navigateur.";
+  message.textContent = "Essaie d'ouvrir l'application dans Safari.";
+});
+})();
+</script>
+</body>
+</html>
